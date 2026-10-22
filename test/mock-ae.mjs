@@ -82,6 +82,7 @@ export function createAE(homeDir) {
     duplicate() { const d = new this.constructor(this.containingComp, this.name); this.containingComp._layers.unshift(d); return d; }
     remove() { const l = this.containingComp._layers; l.splice(l.indexOf(this), 1); }
     moveToBeginning() {} moveToEnd() {} moveBefore() {} moveAfter() {}
+    get canSetCollapseTransformation() { return !(this instanceof ShapeLayer) && !(this instanceof TextLayer); }
     setTrackMatte() {}
   }
   class AVLayer extends Layer {}
@@ -92,7 +93,7 @@ export function createAE(homeDir) {
 
   class CompItem extends Item {
     constructor(name, w, h, pa, dur, fps) {
-      super(name); Object.assign(this, { width: w, height: h, pixelAspect: pa, duration: dur, frameRate: fps, typeName: "Composition", _layers: [], time: 0, motionBlur: false, renderer: "ADBE Advanced 3d", renderers: ["ADBE Advanced 3d", "ADBE Ernst", "ADBE Calder"], shutterAngle: 180 });
+      super(name); Object.assign(this, { bgColor: [0, 0, 0], width: w, height: h, pixelAspect: pa, duration: dur, frameRate: fps, typeName: "Composition", _layers: [], time: 0, motionBlur: false, renderer: "ADBE Advanced 3d", renderers: ["ADBE Advanced 3d", "ADBE Ernst", "ADBE Calder"], shutterAngle: 180 });
       const comp = this;
       const add = (L, n) => { const l = new L(comp, n); comp._layers.unshift(l); return l; };
       this.layers = {

@@ -1505,7 +1505,11 @@ function v2ApplyLayerSettings(layer, a, warnings) {
         layer.autoOrient = AutoOrientType[ao];
     }
     if (a.motionBlur !== undefined) { layer.motionBlur = !!a.motionBlur; }
-    if (a.collapse !== undefined) { layer.collapseTransformation = !!a.collapse; }
+    if (a.collapse !== undefined) {
+        // Shape and text layers are always continuously rasterized; AE refuses the switch there.
+        if (layer.canSetCollapseTransformation === false) { warnings.push(layer.name + ": collapse not settable on this layer type (shape/text layers are always continuously rasterized)"); }
+        else { layer.collapseTransformation = !!a.collapse; }
+    }
     if (a.effectsActive !== undefined) { layer.effectsActive = !!a.effectsActive; }
     if (a.adjustment !== undefined) { layer.adjustmentLayer = !!a.adjustment; }
     if (a.guide !== undefined) { layer.guideLayer = !!a.guide; }
@@ -2132,16 +2136,25 @@ V2.render_frame = function (a) {
     // Remove preview comps from earlier calls (their renders have finished by now).
     for (var i = app.project.numItems; i >= 1; i--) {
         var it = app.project.item(i);
-        if (it instanceof CompItem && it.name.indexOf("__mcp_preview") === 0) { try { it.remove(); } catch (e) { } }
+        if ((it instanceof CompItem && it.name.indexOf("__mcp_preview") === 0) || (it.name.indexOf("__mcp_bg") === 0 && !(it instanceof CompItem))) {
+            try { it.remove(); } catch (e) { }
+        }
     }
-    var src = c, scale = 1;
-    if (c.width > maxW) {
-        scale = maxW / c.width;
+    // saveFrameToPng renders with alpha, so the comp is nested in a preview comp over a
+    // solid in the comp's background colour (unless transparent:true) and scaled to maxWidth.
+    var scale = c.width > maxW ? maxW / c.width : 1;
+    var src = c;
+    if (scale < 1 || !a.transparent) {
         var pw = Math.round(c.width * scale), ph = Math.round(c.height * scale);
         src = app.project.items.addComp("__mcp_preview", pw, ph, c.pixelAspect, c.duration, c.frameRate);
         var pl = src.layers.add(c);
         pl.property("ADBE Transform Group").property("ADBE Scale").setValue([scale * 100, scale * 100]);
         pl.property("ADBE Transform Group").property("ADBE Position").setValue([pw / 2, ph / 2]);
+        if (!a.transparent) {
+            var bg = src.layers.addSolid(c.bgColor, "__mcp_bg", pw, ph, c.pixelAspect, c.duration);
+            bg.moveToEnd();
+            try { bg.source.parentFolder = v2Folder("__mcp_tmp"); } catch (eF) { }
+        }
     }
     var files = [];
     var stamp = new Date().getTime();

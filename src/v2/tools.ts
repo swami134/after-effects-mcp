@@ -455,6 +455,7 @@ export function registerV2Tools(server: McpServer): void {
       time: z.number().optional(),
       times: z.array(z.number()).max(8).optional(),
       maxWidth: z.number().int().optional(),
+      transparent: z.boolean().optional().describe("Keep alpha instead of filling with the comp background colour"),
     },
     async (a) => {
       const r = await callBridge("render_frame", a, { timeoutMs: 120000 });
