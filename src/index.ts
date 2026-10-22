@@ -6,6 +6,7 @@ import * as os from "os";
 import * as path from "path";
 import { z } from "zod";
 import { fileURLToPath } from 'url';
+import { registerV2Tools } from "./v2/tools.js";
 
 // Create an MCP server
 const server = new McpServer({
@@ -378,7 +379,16 @@ Effect Templates:
 - cinematic-look: Combination of effects for a cinematic appearance
 - text-pop: Effects to make text stand out (glow and shadow)
 
-Note: The auto-running panel can be left open in After Effects to continuously listen for commands from external applications.`
+Note: The auto-running panel can be left open in After Effects to continuously listen for commands from external applications.
+
+## v2 tools (recommended)
+The ae_* tools wait for After Effects and return the result directly (no get-results step):
+ae_ping, ae_project, ae_comp_create, ae_comp_set, ae_comp_tree, ae_layer_create, ae_layer_set,
+ae_layer_duplicate, ae_layer_delete, ae_precompose, ae_import, ae_write_asset, ae_prop_get,
+ae_prop_set, ae_prop_tree, ae_keyframes, ae_expression, ae_effect_add, ae_effect_set,
+ae_effects_list, ae_shape_build, ae_mask, ae_camera_set, ae_render_frame, ae_render_queue,
+ae_result, ae_run_jsx, ae_undo, ae_batch.
+ae_run_jsx only works after ticking "Allow raw scripts" in the bridge panel.`
         }
       ]
     };
@@ -945,6 +955,9 @@ server.tool(
     }
   }
 );
+
+// v2 tools (queue-based, results returned directly)
+registerV2Tools(server);
 
 // Start the MCP server
 async function main() {

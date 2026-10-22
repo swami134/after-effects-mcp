@@ -7,7 +7,7 @@
 
 ✨ A Model Context Protocol (MCP) server for Adobe After Effects that enables AI assistants and other applications to control After Effects through a standardized protocol.
 
-> **Fork note (swami134):** This fork is being extended with extra tools (frame previews, save/render, nested property and effect control). Sync check: if you can read this line locally, your pull worked.
+> **Fork note (swami134):** This fork adds the **v2 `ae_*` tools** (see [v2 tools](#-v2-tools)): results come back directly, frames come back as images, any property/effect/keyframe/expression is reachable by path, plus nulls, parenting, precompose, import, shape building, camera depth of field, save and render.
 
 <a href="https://glama.ai/mcp/servers/@Dakkshin/after-effects-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@Dakkshin/after-effects-mcp/badge" alt="mcp-after-effects MCP server" />
@@ -218,12 +218,51 @@ You can animate layers with:
 | `deleteLayer`               | Delete a layer                        |
 | `setLayerMask`              | Create/modify layer masks             |
 
+## 🧰 v2 tools
+
+The `ae_*` tools use a per-command queue (`Documents/ae-mcp-bridge/queue` → `results`), so each tool **waits for After Effects and returns its own result**. There's no `get-results` step and no risk of reading another command's output. Every command is one undo step. The old tools above still work unchanged.
+
+| Tool | What it does |
+|---|---|
+| `ae_ping` | Bridge/AE version, open project, active comp, raw-script switch |
+| `ae_project` | `info` (list items), `new`, `open`, `save` (or save-as with `path`), `close` |
+| `ae_comp_create` / `ae_comp_set` | Create or change a comp: size, fps, duration, bg color, work area, **motion blur**, shutter, **renderer** (classic / cinema4d / advanced), resolution, time |
+| `ae_comp_tree` | Every layer with id, type, 3D, parent, timing, switches, effects (optionally transform values and expressions) |
+| `ae_layer_create` | `null`, `solid`, `adjustment`, `shape`, `text` (incl. box text and style), `camera`, `light`, `item` (footage or comp as a layer), and settings in the same call |
+| `ae_layer_set` | Any switch on one or many layers: 3D, **auto-orient**, **parent**, motion blur, **collapse transformations**, blend mode, track matte, quality, timing, full transform incl. X/Y rotation and orientation, stacking order |
+| `ae_layer_duplicate` / `ae_layer_delete` | Duplicate N times with per-copy names and settings / delete several |
+| `ae_precompose` | Precompose layers |
+| `ae_import` | Import images, layered PSD/AI (as comps), video, audio, sequences, `.aep`; optionally add to a comp |
+| `ae_write_asset` | Write a file (base64 or text) into `Documents/ae-mcp-bridge/assets` or `scripts`, ready to import or run |
+| `ae_prop_get` / `ae_prop_set` | Read or write **any property by path**, e.g. `"Effects/CC Particle World/Producer/Position X"`, mask paths, shape paths, text, camera/light options |
+| `ae_prop_tree` | Dump a layer's property tree (names, match names, values, dropdown options) to discover paths |
+| `ae_keyframes` | Keyframes on any property with linear/bezier/hold, Easy Ease, auto-bezier, custom speed/influence, spatial tangents, roving |
+| `ae_expression` | Set expressions on any property for many layers at once; returns each expression error |
+| `ae_effect_add` / `ae_effect_set` / `ae_effects_list` | Add effects with **nested settings and layer references**, edit/reorder/remove, list installed effects with match names |
+| `ae_shape_build` | Vector artwork from JSON: bezier paths, rect/ellipse/star, fill, stroke, gradient, trim, repeater, offset, round corners, wiggle, zig-zag, pucker, twist, merge, nested groups with transforms |
+| `ae_mask` | Bezier/rect/ellipse masks with mode, inverted, feather, opacity, expansion |
+| `ae_camera_set` | Zoom, **depth of field**, focus distance, aperture, blur level, keep-a-layer-in-focus |
+| `ae_render_frame` | Render frames to PNG and **return them as images** (for visual checks) |
+| `ae_render_queue` | Add to the render queue (H.264 template if available), list templates, start, clear, send to Media Encoder |
+| `ae_result` | Collect the result of a long command started with `wait:false` |
+| `ae_run_jsx` | Run ExtendScript inline or from `Documents/ae-mcp-bridge/scripts`. **Off by default:** tick *Allow raw scripts* in the panel |
+| `ae_undo` | Undo the last command(s) |
+| `ae_batch` | Many commands in one call and one undo step |
+
+**Security:** `ae_run_jsx` can do anything a script can do on your machine. It only works while *Allow raw scripts* is ticked in the bridge panel (the setting is remembered). Leave it off unless you need it, and never expose the MCP server to people you don't trust.
+
+### Testing without After Effects
+
+`npm run build && npm test` starts the real server, connects an MCP client, and runs the panel's v2 code against a mock of the After Effects object model (`test/mock-ae.mjs`). It catches script and protocol errors, not After Effects behaviour.
+
 ## 👨‍💻 For Developers
 
 ### 🧩 Project Structure
 
-- `src/index.ts`: MCP server implementation
-- `src/scripts/mcp-bridge-auto.jsx`: Main After Effects panel script
+- `src/index.ts`: MCP server implementation (original tools)
+- `src/v2/bridge.ts`, `src/v2/tools.ts`: v2 queue client and `ae_*` tools
+- `src/scripts/mcp-bridge-auto.jsx`: Main After Effects panel script (v2 handlers between the `MCP V2 BEGIN/END` markers)
+- `test/`: end-to-end test with a mocked After Effects
 - `install-bridge.js`: Script to install the panel in After Effects
 
 ### 📦 Building the Project
