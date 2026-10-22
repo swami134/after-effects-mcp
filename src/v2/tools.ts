@@ -5,6 +5,7 @@ import * as path from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { BridgeResult, callBridge, cleanupOld, sandboxPath, waitForResult, waitForStableFile } from "./bridge.js";
+import { shrinkPng } from "./png.js";
 
 const CompRef = z
   .union([z.string(), z.number().int(), z.object({ id: z.number().int() })])
@@ -449,25 +450,42 @@ export function registerV2Tools(server: McpServer): void {
 
   server.tool(
     "ae_render_frame",
-    "Render one or more frames of a comp to PNG and return them as images, so the result can be checked visually. maxWidth downsizes large comps (default 1280).",
+    "Render frames of a comp (with its camera, depth of field and motion blur) and return them as images for visual checks. Full-size renders are downsized on the server to maxWidth (default 960). Keep to 2-3 frames per call over slow links.",
     {
       comp: CompRef,
       time: z.number().optional(),
-      times: z.array(z.number()).max(8).optional(),
-      maxWidth: z.number().int().optional(),
-      transparent: z.boolean().optional().describe("Keep alpha instead of filling with the comp background colour"),
+      times: z.array(z.number()).max(4).optional(),
+      maxWidth: z.number().int().min(64).max(1920).optional(),
+      method: z.enum(["direct", "nested"]).optional().describe("direct (default): render the comp itself. nested: scaled preview comp (may ignore the comp camera)"),
+      transparent: z.boolean().optional().describe("nested method only: keep alpha"),
     },
     async (a) => {
       const r = await callBridge("render_frame", a, { timeoutMs: 120000 });
       if (!r.ok) return reply(r);
+      const maxWidth = a.maxWidth ?? 960;
+      const bg = (r.result.bgColor ?? [0, 0, 0]) as [number, number, number];
       const images: Content[] = [];
-      for (const f of r.result.frames as { time: number; file: string }[]) {
-        if (await waitForStableFile(f.file, 90000)) {
-          images.push({ type: "image", data: fs.readFileSync(f.file).toString("base64"), mimeType: "image/png" });
-        } else {
-          r.result.missing = (r.result.missing || []).concat(f.file);
+      const notes: string[] = [];
+      for (const f of r.result.frames as { time: number; file: string | null }[]) {
+        if (!f.file || !(await waitForStableFile(f.file, 90000))) {
+          notes.push(`t=${f.time}: frame was not written`);
+          continue;
+        }
+        const buf = fs.readFileSync(f.file);
+        try {
+          const small = shrinkPng(buf, maxWidth, bg);
+          images.push({ type: "image", data: small.png.toString("base64"), mimeType: "image/png" });
+          notes.push(`t=${f.time}: ${small.width}x${small.height}`);
+        } catch (e) {
+          if (buf.length < 3_000_000) {
+            images.push({ type: "image", data: buf.toString("base64"), mimeType: "image/png" });
+            notes.push(`t=${f.time}: sent unscaled (${String(e)})`);
+          } else {
+            notes.push(`t=${f.time}: could not downsize (${String(e)}); file kept at ${f.file}`);
+          }
         }
       }
+      r.result.preview = notes;
       return reply(r, images);
     }
   );

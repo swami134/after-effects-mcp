@@ -2127,21 +2127,37 @@ V2.camera_set = function (a) {
     return { camera: l.name, options: r };
 };
 
+// Renders frames with CompItem.saveFrameToPng on the comp itself, so its camera, depth of field
+// and motion blur are used. AE writes full-size PNGs asynchronously; the MCP server waits for
+// each file and downsizes it. method "nested" renders through a scaled preview comp instead
+// (smaller files, but on AE 26.5 the nested comp is rendered without its camera).
 V2.render_frame = function (a) {
     var c = v2Comp(a.comp);
-    if (typeof c.saveFrameToPng !== "function") { v2Fail("CompItem.saveFrameToPng is not available in this After Effects version"); }
     var times = a.times || [a.time !== undefined ? a.time : c.time];
-    var maxW = a.maxWidth || 1280;
+    var maxW = a.maxWidth || 960;
     var dir = v2SubDir("frames");
-    // Remove preview comps from earlier calls (their renders have finished by now).
+    var stamp = new Date().getTime();
+    if (a.method === "nested") { return v2SnapshotFrames(c, times, maxW, dir, stamp, a); }
+    if (typeof c.saveFrameToPng !== "function") { v2Fail("CompItem.saveFrameToPng is not available in this After Effects version"); }
+    var files = [];
+    for (var i = 0; i < times.length; i++) {
+        var f = new File(dir.fsName + "/frame_" + stamp + "_" + i + ".png");
+        c.saveFrameToPng(times[i], f);
+        files.push({ time: times[i], file: f.fsName });
+    }
+    var bg = c.bgColor;
+    return { comp: c.name, method: "direct", width: c.width, height: c.height, maxWidth: maxW,
+        bgColor: [Math.round(bg[0] * 255), Math.round(bg[1] * 255), Math.round(bg[2] * 255)], frames: files };
+};
+
+function v2SnapshotFrames(c, times, maxW, dir, stamp, a) {
+    if (typeof c.saveFrameToPng !== "function") { v2Fail("CompItem.saveFrameToPng is not available in this After Effects version"); }
     for (var i = app.project.numItems; i >= 1; i--) {
         var it = app.project.item(i);
         if ((it instanceof CompItem && it.name.indexOf("__mcp_preview") === 0) || (it.name.indexOf("__mcp_bg") === 0 && !(it instanceof CompItem))) {
             try { it.remove(); } catch (e) { }
         }
     }
-    // saveFrameToPng renders with alpha, so the comp is nested in a preview comp over a
-    // solid in the comp's background colour (unless transparent:true) and scaled to maxWidth.
     var scale = c.width > maxW ? maxW / c.width : 1;
     var src = c;
     if (scale < 1 || !a.transparent) {
@@ -2157,14 +2173,13 @@ V2.render_frame = function (a) {
         }
     }
     var files = [];
-    var stamp = new Date().getTime();
     for (var t = 0; t < times.length; t++) {
         var f = new File(dir.fsName + "/frame_" + stamp + "_" + t + ".png");
         src.saveFrameToPng(times[t], f);
         files.push({ time: times[t], file: f.fsName });
     }
-    return { comp: c.name, width: src.width, height: src.height, scale: scale, frames: files };
-};
+    return { comp: c.name, method: "snapshot", width: src.width, height: src.height, scale: scale, frames: files };
+}
 
 var V2_RQ_STATUS = {};
 function v2RqStatusName(s) {

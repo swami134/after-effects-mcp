@@ -9,7 +9,7 @@
     "start": "node build/index.js",
     "install-bridge": "node install-bridge.js",
     "postinstall": "npm run build",
-    "test": "node test/e2e-v2.mjs"
+    "test": "node --experimental-strip-types --no-warnings test/png-test.mjs && node test/e2e-v2.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",

@@ -8,6 +8,8 @@ import * as vm from "vm";
 
 const ENUM = (names) => Object.fromEntries(names.map((n, i) => [n, 1000 + i]));
 
+const PNG_1PX = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 export function createAE(homeDir) {
   let nextId = 1;
 
@@ -93,7 +95,7 @@ export function createAE(homeDir) {
 
   class CompItem extends Item {
     constructor(name, w, h, pa, dur, fps) {
-      super(name); Object.assign(this, { bgColor: [0, 0, 0], width: w, height: h, pixelAspect: pa, duration: dur, frameRate: fps, typeName: "Composition", _layers: [], time: 0, motionBlur: false, renderer: "ADBE Advanced 3d", renderers: ["ADBE Advanced 3d", "ADBE Ernst", "ADBE Calder"], shutterAngle: 180 });
+      super(name); Object.assign(this, { bgColor: [0.02, 0.05, 0.07], frameDuration: 1 / fps, width: w, height: h, pixelAspect: pa, duration: dur, frameRate: fps, typeName: "Composition", _layers: [], time: 0, motionBlur: false, renderer: "ADBE Advanced 3d", renderers: ["ADBE Advanced 3d", "ADBE Ernst", "ADBE Calder"], shutterAngle: 180 });
       const comp = this;
       const add = (L, n) => { const l = new L(comp, n); comp._layers.unshift(l); return l; };
       this.layers = {
@@ -112,8 +114,7 @@ export function createAE(homeDir) {
     layer(i) { return this._layers[i - 1]; }
     openInViewer() {}
     saveFrameToPng(t, file) {
-      // 1x1 PNG
-      fs.writeFileSync(file.fsName, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
+      fs.writeFileSync(file.fsName, Buffer.from(PNG_1PX, "base64"));
     }
   }
 
@@ -135,12 +136,22 @@ export function createAE(homeDir) {
       item: (i) => rqItems[i - 1],
       items: {
         add: (comp) => {
-          const om = { file: null, templates: ["H.264 - Match Render Settings - 15 Mbps", "Lossless"], applyTemplate(t) { if (!this.templates.includes(t)) throw new Error("no template"); } };
-          const it = { comp, status: RQItemStatus.QUEUED, templates: ["Best Settings", "Draft Settings"], applyTemplate() {}, setSettings() {}, outputModule: () => om, remove() { rqItems.splice(rqItems.indexOf(this), 1); } };
+          const om = { file: null, templates: ["H.264 - Match Render Settings - 15 Mbps", "Lossless", "PNG Sequence"], applyTemplate(t) { if (!this.templates.includes(t)) throw new Error("no template"); } };
+          const it = { comp, render: true, status: RQItemStatus.QUEUED, templates: ["Best Settings", "Draft Settings"], applyTemplate() {}, setSettings() {}, outputModule: () => om, remove() { rqItems.splice(rqItems.indexOf(this), 1); } };
           rqItems.push(it); return it;
         },
       },
-      render() { rqItems.forEach((i) => (i.status = RQItemStatus.DONE)); },
+      render() {
+        rqItems.forEach((i) => {
+          if (!i.render) return;
+          i.status = RQItemStatus.DONE;
+          const f = i.outputModule(1).file;
+          if (f && f.fsName.includes("[#####]")) {
+            const frame = String(Math.round(i.timeSpanStart * i.comp.frameRate)).padStart(5, "0");
+            fs.writeFileSync(f.fsName.replace("[#####]", frame), Buffer.from(PNG_1PX, "base64"));
+          }
+        });
+      },
       queueInAME() {},
     },
   };

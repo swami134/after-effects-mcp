@@ -75,6 +75,7 @@ await call("ae_effects_list", { query: "wave" });
 const asset = await call("ae_write_asset", { path: "forest/leaf.png", content: "iVBORw0KGgo=", encoding: "base64" });
 await call("ae_write_asset", { path: "../escape.txt", content: "x" }, false);
 await call("ae_import", { asset: "forest/leaf.png", addToComp: "MAIN", set: { threeD: true } });
+await call("ae_render_frame", { comp: "MAIN", times: [1], method: "nested" });
 const frames = await call("ae_render_frame", { comp: "MAIN", times: [2, 6] });
 const images = frames.r.content.filter((c) => c.type === "image").length;
 console.log(`${images === 2 ? "PASS" : "FAIL"} ae_render_frame returned ${images} images`);
