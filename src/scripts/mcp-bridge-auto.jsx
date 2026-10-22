@@ -2797,9 +2797,21 @@ function checkForCommands() {
 }
 
 // Set up timer to check for commands
+// The task id is kept on $.global so a re-opened panel replaces the old timer
+// instead of stacking a second one, and closing the window stops polling.
 function startCommandChecker() {
-    app.scheduleTask("checkForCommands()", checkInterval, true);
+    if ($.global.__mcpBridgeTaskId) {
+        try { app.cancelTask($.global.__mcpBridgeTaskId); } catch (e) { }
+    }
+    $.global.__mcpBridgeTaskId = app.scheduleTask("checkForCommands()", checkInterval, true);
 }
+
+panel.onClose = function () {
+    if ($.global.__mcpBridgeTaskId) {
+        try { app.cancelTask($.global.__mcpBridgeTaskId); } catch (e) { }
+        $.global.__mcpBridgeTaskId = null;
+    }
+};
 
 // Add manual check button
 var checkButton = panel.add("button", undefined, "Check for Commands Now");
